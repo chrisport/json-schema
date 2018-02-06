@@ -15,6 +15,8 @@ import java.nio.charset.Charset;
 import java.util.LinkedList;
 import java.util.function.Supplier;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.everit.json.schema.SchemaException;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -68,6 +70,28 @@ class JsonPointerEvaluator {
 
     }
 
+    private static final ObjectMapper yamlReader = new ObjectMapper(new YAMLFactory());
+
+    private static String convertYamlToJson(String yaml) throws IOException {
+        Object obj = yamlReader.readValue(yaml, Object.class);
+
+        ObjectMapper jsonWriter = new ObjectMapper();
+        return jsonWriter.writeValueAsString(obj);
+    }
+
+    private static JsonObject parseToJSONOrYAML(String input){
+        if (!(input.startsWith("{") || input.startsWith("["))) {
+            // possibly yaml
+            try {
+                input = convertYamlToJson(input);
+            } catch (IOException e) {
+                // ignore and just try as is, JSONTokener will throw appropriate JSONParseException
+            }
+        }
+        return new JsonObject(new JSONObject(new JSONTokener(input)).toMap());
+
+    }
+
     private static JsonObject executeWith(final SchemaClient client, final String url) {
         String resp = null;
         BufferedReader buffReader = null;
@@ -79,10 +103,10 @@ class JsonPointerEvaluator {
             String line;
             StringBuilder strBuilder = new StringBuilder();
             while ((line = buffReader.readLine()) != null) {
-                strBuilder.append(line);
+                strBuilder.append(line).append("\n");
             }
-            resp = strBuilder.toString();
-            return new JsonObject(new JSONObject(new JSONTokener(resp)).toMap());
+            resp = strBuilder.toString().trim();
+            return parseToJSONOrYAML(resp);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } catch (JSONException e) {
